@@ -14,8 +14,6 @@ from langchain_community.llms import Ollama
 embedding_model_name = "sentence-transformers/all-mpnet-base-v2"
 model_kwargs = {"device": "cpu"}
 embeddings = HuggingFaceEmbeddings(model_name=embedding_model_name, model_kwargs=model_kwargs)
-# embeddings = OpenAIEmbeddings(api_key="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")
-
 llm = Ollama(model="pdf_query")
 # llm = ChatOpenAI()
 
