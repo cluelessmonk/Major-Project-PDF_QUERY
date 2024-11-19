@@ -1,7 +1,7 @@
 import streamlit as st
+from dotenv import load_dotenv
 from PyPDF2 import PdfReader
 import numpy as np
-# Transformers is for importing modells to convert itinto tokens adn also text into vector of numbers
 from transformers import AutoTokenizer, AutoModel
 import torch
 from langchain_community.llms import Ollama  
@@ -90,6 +90,7 @@ def handle_userinput(user_question, embeddings, text_chunks):
 
 def main():
     """Main function to handle the Streamlit app."""
+    load_dotenv()
     st.set_page_config(page_title="Chat with multiple PDFs", page_icon=":books:")
 
     if "embeddings" not in st.session_state:
