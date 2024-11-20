@@ -4,8 +4,8 @@ import numpy as np
 # Transformers is for importing modells to convert itinto tokens adn also text into vector of numbers
 from transformers import AutoTokenizer, AutoModel
 import torch
-from langchain_community.llms import Ollama  
-
+from langchain_community.llms import Ollama 
+from webscrape import get_webscrape_data
 
 llm = Ollama(model="pdf_query")
 
@@ -13,6 +13,8 @@ llm = Ollama(model="pdf_query")
 model_name = "sentence-transformers/all-mpnet-base-v2"
 tokenizer = AutoTokenizer.from_pretrained(model_name)
 embedding_model = AutoModel.from_pretrained(model_name)
+
+
 
 
 def get_pdf_text(pdf_docs):
@@ -73,56 +75,87 @@ def generate_llm_response(query, context):
     """Uses LLM to generate a response based on retrieved context."""
     context_combined = "\n\n".join(context)
     prompt = f"Based on the following context, answer the question:\n\nContext:\n{context_combined}\n\nQuestion: {query}"
-    response = llm(prompt=prompt)  # Adjust for your LLM method
-    return response
+    for response in  llm.stream(prompt):
+        yield response  # Adjust for your LLM method
 
 
 def handle_userinput(user_question, embeddings, text_chunks):
-    """Handles user input and retrieves relevant text."""
+    """Handles user input, retrieves relevant text, and streams LLM response."""
     # Retrieve top chunks
     retrieved_chunks = manual_conversation_chain(user_question, embeddings, text_chunks)
 
-    # Generate LLM response
-    response = generate_llm_response(user_question, retrieved_chunks)
+    # Prepare for the streamed response display
     st.subheader("LLM Response:")
-    st.write(response)
+    response_placeholder = st.empty()  # Placeholder for the response
+    full_response = ""  # To store the accumulated response
+
+    # Stream and display the response
+    for token in generate_llm_response(user_question, retrieved_chunks):
+        full_response += token
+        response_placeholder.text(full_response)  # Update the UI incrementally
+
 
 
 def main():
     """Main function to handle the Streamlit app."""
-    st.set_page_config(page_title="Chat with multiple PDFs", page_icon=":books:")
+    st.set_page_config(page_title="Chat with Custom LLM")
 
     if "embeddings" not in st.session_state:
         st.session_state.embeddings = None
     if "text_chunks" not in st.session_state:
         st.session_state.text_chunks = None
+    mode = st.select_slider("Chose the Input source ", options =["PDF" , "Web-query"])
+    if mode == "PDF":
+        st.header("Chat with multiple PDFs :books:")
+        user_question = st.text_input("Ask a question about your documents:")
+        if user_question and st.session_state.embeddings is not None:
+            handle_userinput(user_question, st.session_state.embeddings, st.session_state.text_chunks)
 
-    st.header("Chat with multiple PDFs :books:")
-    user_question = st.text_input("Ask a question about your documents:")
-    if user_question and st.session_state.embeddings is not None:
-        handle_userinput(user_question, st.session_state.embeddings, st.session_state.text_chunks)
+        with st.sidebar:
+            st.subheader("Your documents")
+            pdf_docs = st.file_uploader(
+                "Upload your PDFs here and click on 'Process'", accept_multiple_files=True)
+            if st.button("Process"):
+                with st.spinner("Processing"):
+                    # Get PDF text
+                    raw_text = get_pdf_text(pdf_docs)
 
-    with st.sidebar:
-        st.subheader("Your documents")
-        pdf_docs = st.file_uploader(
-            "Upload your PDFs here and click on 'Process'", accept_multiple_files=True)
-        if st.button("Process"):
-            with st.spinner("Processing"):
-                # Get PDF text
-                raw_text = get_pdf_text(pdf_docs)
+                    # Split text into chunks
+                    text_chunks = custom_text_splitter(raw_text)
 
-                # Split text into chunks
-                text_chunks = custom_text_splitter(raw_text)
+                    # Compute embeddings for chunks
+                    embeddings = compute_embeddings(text_chunks)
 
-                # Compute embeddings for chunks
-                embeddings = compute_embeddings(text_chunks)
+                    # Store in session state
+                    st.session_state.text_chunks = text_chunks
+                    st.session_state.embeddings = embeddings
 
-                # Store in session state
-                st.session_state.text_chunks = text_chunks
-                st.session_state.embeddings = embeddings
+                    st.success("Documents processed successfully!")
+    else:
+        st.header("Chat with  web-search query   :globe_with_meridians:")
+        user_question = st.text_input("Ask a question about your Web-search:")
+        if user_question and st.session_state.embeddings is not None:
+            handle_userinput(user_question, st.session_state.embeddings, st.session_state.text_chunks)
 
-                st.success("Documents processed successfully!")
+        with st.sidebar:
+            st.subheader("Your query")
+            web_query = st.text_input("Enter your websearch query here")
+            if st.button("Process"):
+                with st.spinner("Processing the webscrape content"):
+                    # Get PDF text
+                    raw_text = get_webscrape_data(web_query)
 
+                    # Split text into chunks
+                    text_chunks = custom_text_splitter(raw_text)
+
+                    # Compute embeddings for chunks
+                    embeddings = compute_embeddings(text_chunks)
+
+                    # Store in session state
+                    st.session_state.text_chunks = text_chunks
+                    st.session_state.embeddings = embeddings
+
+                    st.success("Web search processed successfully!")
 
 if __name__ == '__main__':
     main()
