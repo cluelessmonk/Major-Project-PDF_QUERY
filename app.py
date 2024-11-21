@@ -1,20 +1,21 @@
 import streamlit as st
 from PyPDF2 import PdfReader
 import numpy as np
-# Transformers is for importing modells to convert itinto tokens adn also text into vector of numbers
+import pandas as pd
 from transformers import AutoTokenizer, AutoModel
 import torch
 from langchain_community.llms import Ollama 
 from webscrape import get_webscrape_data
-
+from pandasai import SmartDataframe
 llm = Ollama(model="pdf_query")
-
-
+import os
+from dotenv import load_dotenv
+load_dotenv()
+from pandasai.llm.openai import OpenAI
+llm2  = OpenAI(api_token=os.getenv("OPENAI_API_KEY"),model = "gpt-3.5-turbo-instruct")
 model_name = "sentence-transformers/all-mpnet-base-v2"
 tokenizer = AutoTokenizer.from_pretrained(model_name)
 embedding_model = AutoModel.from_pretrained(model_name)
-
-
 
 
 def get_pdf_text(pdf_docs):
@@ -76,7 +77,7 @@ def generate_llm_response(query, context):
     context_combined = "\n\n".join(context)
     prompt = f"Based on the following context, answer the question:\n\nContext:\n{context_combined}\n\nQuestion: {query}"
     for response in  llm.stream(prompt):
-        yield response  # Adjust for your LLM method
+        yield response  
 
 
 def handle_userinput(user_question, embeddings, text_chunks):
@@ -92,10 +93,10 @@ def handle_userinput(user_question, embeddings, text_chunks):
     # Stream and display the response
     for token in generate_llm_response(user_question, retrieved_chunks):
         full_response += token
-        response_placeholder.text(full_response)  # Update the UI incrementally
+        wrapped_response = full_response.replace("\n", "\n\n")  # Ensure vertical spacing
+        response_placeholder.markdown(wrapped_response)  # Use Markdown for better rendering
 
-
-
+topics = ["PDF" , "Web-query" , "Dataset visualization"]
 def main():
     """Main function to handle the Streamlit app."""
     st.set_page_config(page_title="Chat with Custom LLM")
@@ -104,7 +105,7 @@ def main():
         st.session_state.embeddings = None
     if "text_chunks" not in st.session_state:
         st.session_state.text_chunks = None
-    mode = st.select_slider("Chose the Input source ", options =["PDF" , "Web-query"])
+    mode = st.selectbox("Select a Topic", topics)
     if mode == "PDF":
         st.header("Chat with multiple PDFs :books:")
         user_question = st.text_input("Ask a question about your documents:")
@@ -131,7 +132,7 @@ def main():
                     st.session_state.embeddings = embeddings
 
                     st.success("Documents processed successfully!")
-    else:
+    elif mode == "Web-query":
         st.header("Chat with  web-search query   :globe_with_meridians:")
         user_question = st.text_input("Ask a question about your Web-search:")
         if user_question and st.session_state.embeddings is not None:
@@ -156,6 +157,23 @@ def main():
                     st.session_state.embeddings = embeddings
 
                     st.success("Web search processed successfully!")
+    elif mode == "Dataset visualization":
+        st.header("Chat with your CSV Data and its visualizatation :chart_with_upwards_trend:")
+        file_uploaded = st.file_uploader("upload your csv", type=["csv"])
+
+        if file_uploaded is not None :
+            data = pd.read_csv(file_uploaded)
+            df = SmartDataframe(data, config = {"llm" : llm2})
+            st.write(data.head(5))
+            prompt = st.text_area("Enter your question here")
+            if st.button("Generate"):
+                if prompt:
+                    with st.spinner("Generating Response ... "):
+                        st.write(df.chat(prompt))
+                else:
+                    st.warning("Please Enter a Prompt") 
+                                
+
 
 if __name__ == '__main__':
     main()
