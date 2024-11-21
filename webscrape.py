@@ -26,7 +26,6 @@ def get_webscrape_data(user_query):
     # Configure WebDriver
     options = webdriver.ChromeOptions()
     options.add_argument('--headless')  # Run browser in headless mode
-    options.add_argument('--disable-gpu')
     options.add_argument('--no-sandbox')
     options.add_argument('--log-level=3')
 
